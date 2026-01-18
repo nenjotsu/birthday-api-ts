@@ -3,8 +3,10 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult, ScheduledEvent } from 'aws
 // Item type for DynamoDB
 export interface Item {
   id: string;
-  name: string;
-  description?: string;
+  firstName: string;
+  lastName: string;
+  birthday: string;
+  timezone: string;
   createdAt: string;
   updatedAt: string;
 }

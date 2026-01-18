@@ -17,7 +17,7 @@ exports.handler = async (event: { body: any; }) => {
     const body = JSON.parse(event.body || '{}');
 
     // Validate required fields
-    if (!body.name) {
+    if (!body.firstName || !body.lastName || !body.birthday || !body.timezone) {
       return {
         statusCode: 400,
         headers: {
@@ -33,8 +33,10 @@ exports.handler = async (event: { body: any; }) => {
     // Create new item
     const item = {
       id: randomUUID(),
-      name: body.name,
-      description: body.description || '',
+      firstName: body.firstName,
+      lastName: body.lastName,
+      birthday: body.birthday,
+      timezone: body.timezone,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

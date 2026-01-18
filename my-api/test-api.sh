@@ -18,8 +18,10 @@ echo "1. Creating a new item..."
 RESPONSE=$(curl -s -X POST "$BASE_URL/items" \
   -H 'Content-Type: application/json' \
   -d '{
-    "name": "Test Item",
-    "description": "This is a test item"
+    "firstName": "John",
+    "lastName": "Doe",
+    "birthday": "1990-01-01",
+    "timezone": "America/New_York"
   }')
 
 echo "$RESPONSE" | jq .
@@ -41,8 +43,10 @@ echo "4. Creating another item..."
 curl -s -X POST "$BASE_URL/items" \
   -H 'Content-Type: application/json' \
   -d '{
-    "name": "Second Item",
-    "description": "Another test item"
+    "firstName": "Jane",
+    "lastName": "Smith",
+    "birthday": "1985-05-15",
+    "timezone": "Europe/London"
   }' | jq .
 echo ""
 
