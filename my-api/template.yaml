@@ -176,7 +176,7 @@ Resources:
         EntryPoints:
           - ./src/handlers/deleteItem.ts
 
-  # Scheduled Function (runs every 5 minutes)
+  # Scheduled Function (runs every 1 hour)
   ScheduledFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -189,7 +189,7 @@ Resources:
         ScheduledEvent:
           Type: Schedule
           Properties:
-            Schedule: rate(1 minute)
+            Schedule: rate(1 hour)
             Name: BirthdayGreetingScheduler
             Enabled: true
     Metadata:

@@ -104,7 +104,7 @@ echo "11. Checking scheduled function logs..."
 APP_NAME_SCHEDULER=$(aws logs describe-log-groups --endpoint-url http://localhost:4566 --query 'logGroups[0].[logGroupName,storedBytes][0]'   --output text)
 aws logs tail \
   "$APP_NAME_SCHEDULER" \
-  --since 1m \
+  --since 10m \
   --format short \
   --endpoint-url http://localhost:4566
 
