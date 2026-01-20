@@ -1,12 +1,10 @@
 # Gettting Started
 
-# Start LocalStack
+# Start LocalStack & Kafka
 ```bash
 # Using Docker Compose
-docker-compose up -d
+$ docker-compose up -d
 
-# Or using LocalStack CLI
-localstack start -d
 ```
 
 ## Deploy to LocalStack
@@ -37,6 +35,13 @@ curl -X POST "$BASE_URL/items" \
 curl "$BASE_URL/items" | jq .
 ```
 
+# To run the consumer
+```bash
+cd ./kafka
+npx ts-node src/consumer.ts
+```
+
+
 
 ```bash
 # To display all log groups
@@ -45,3 +50,6 @@ aws logs describe-log-groups \
   --query 'logGroups[*].logGroupName' \
   --output table
 ```
+
+# check the kafka messages
+Go to http://localhost:8080/ to see the topics and messages of the users with their birthday greetings
