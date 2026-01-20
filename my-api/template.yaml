@@ -21,10 +21,19 @@ Resources:
       AttributeDefinitions:
         - AttributeName: id
           AttributeType: S
+        - AttributeName: birthdayMonthDay
+          AttributeType: S
       KeySchema:
         - AttributeName: id
           KeyType: HASH
       BillingMode: PAY_PER_REQUEST
+      GlobalSecondaryIndexes:
+        - IndexName: BirthdayMonthDayIndex
+          KeySchema:
+            - AttributeName: birthdayMonthDay
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
 
   # API Gateway
   ApiGateway:
@@ -32,7 +41,7 @@ Resources:
     Properties:
       StageName: dev
       Cors:
-        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowMethods: "'GET,POST,DELETE,PUT,OPTIONS'"
         AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
         AllowOrigin: "'*'"
 
@@ -50,13 +59,13 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref ApiGateway
-            Path: /items
+            Path: /user
             Method: GET
         GetItemById:
           Type: Api
           Properties:
             RestApiId: !Ref ApiGateway
-            Path: /items/{id}
+            Path: /user/{id}
             Method: GET
     Metadata:
       BuildMethod: esbuild
@@ -65,7 +74,32 @@ Resources:
         Target: es2020
         Sourcemap: true
         EntryPoints:
-          - ./getItems.js
+          - ./src/handlers/getItems.ts
+  
+   # GET Function
+  # GetBirthdayTodayFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: dist/handlers/
+  #     Handler: getBirthdayToday.handler
+  #     Policies:
+  #       - DynamoDBReadPolicy:
+  #           TableName: !Ref ItemsTable
+  #     Events:
+  #       GetBirthdayToday:
+  #         Type: Api
+  #         Properties:
+  #           RestApiId: !Ref ApiGateway
+  #           Path: /birthdaytoday
+  #           Method: GET
+  #   Metadata:
+  #     BuildMethod: esbuild
+  #     BuildProperties:
+  #       Minify: false
+  #       Target: es2020
+  #       Sourcemap: true
+  #       EntryPoints:
+  #         - ./src/handlers/getBirthdayToday.ts
 
   # POST Function
   CreateItemFunction:
@@ -81,7 +115,7 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref ApiGateway
-            Path: /items
+            Path: /user
             Method: POST
     Metadata:
       BuildMethod: esbuild
@@ -90,7 +124,57 @@ Resources:
         Target: es2020
         Sourcemap: true
         EntryPoints:
-          - ./createItem.js
+          - ./src/handlers/createItem.ts
+
+  # PUT Function
+  PutItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: dist/handlers/
+      Handler: putItem.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ItemsTable
+      Events:
+        PutItem:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /user
+            Method: PUT
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2020
+        Sourcemap: true
+        EntryPoints:
+          - ./src/handlers/putItem.ts
+
+  # DELETE Function
+  DeleteItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: dist/handlers/
+      Handler: deleteItem.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ItemsTable
+      Events:
+        DeleteItem:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /user/{id}
+            Method: DELETE
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: false
+        Target: es2020
+        Sourcemap: true
+        EntryPoints:
+          - ./src/handlers/deleteItem.ts
 
   # Scheduled Function (runs every 5 minutes)
   ScheduledFunction:
@@ -102,12 +186,11 @@ Resources:
         - DynamoDBReadPolicy:
             TableName: !Ref ItemsTable
       Events:
-        ScheduleEvent:
+        ScheduledEvent:
           Type: Schedule
           Properties:
-            Schedule: rate(5 minutes)
-            Name: MyScheduledEvent
-            Description: Runs every 5 minutes
+            Schedule: rate(1 minute)
+            Name: BirthdayGreetingScheduler
             Enabled: true
     Metadata:
       BuildMethod: esbuild
@@ -116,7 +199,7 @@ Resources:
         Target: es2020
         Sourcemap: true
         EntryPoints:
-          - ./scheduled.js
+          - ./src/handlers/scheduled.ts
 
 Outputs:
   ApiEndpoint:
@@ -125,3 +208,6 @@ Outputs:
   ItemsTableName:
     Description: "DynamoDB table name"
     Value: !Ref ItemsTable
+  BirthdayIndexName:
+    Description: "Birthday GSI name"
+    Value: "BirthdayMonthDayIndex"

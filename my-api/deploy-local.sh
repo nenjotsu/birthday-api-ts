@@ -31,7 +31,7 @@ fi
 
 # Build the SAM application
 echo -e "${GREEN}Building SAM application...${NC}"
-sam build
+sam build --no-use-container --template template.yaml --manifest package.json
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}SAM build failed!${NC}"
@@ -65,12 +65,14 @@ API_ID=$(aws apigateway get-rest-apis \
 
 API_ENDPOINT="http://localhost:4566/restapis/${API_ID}/dev/_user_request_"
 
+
+
 echo -e "${GREEN}Deployment complete!${NC}"
 echo -e "${YELLOW}API Endpoint: ${API_ENDPOINT}${NC}"
 echo ""
-echo "Test commands:"
-echo "  GET all items:    curl ${API_ENDPOINT}/items"
-echo "  POST new item:    curl -X POST ${API_ENDPOINT}/items -H 'Content-Type: application/json' -d '{\"name\":\"Test Item\",\"description\":\"Test Description\"}'"
-echo "  GET single item:  curl ${API_ENDPOINT}/items/{id}"
+echo -e "$(aws logs describe-log-groups \
+  --endpoint-url http://localhost:4566 \
+  --query 'logGroups[*].logGroupName' \
+  --output table)"
 echo ""
 echo "Run tests:          ./test-api.sh"

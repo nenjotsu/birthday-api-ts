@@ -1,0 +1,15 @@
+version = 0.1
+
+[default.global.parameters]
+stack_name = "my-stack"
+s3_bucket = "my-bucket"
+region = "us-east-1"
+docker_network = "my-api"  # Your network name
+
+[default.build.parameters]
+cached = true
+parallel = true
+docker_network = "my-api"  # Applies to build
+
+[default.local_start_api.parameters]
+docker_network = "my-api"

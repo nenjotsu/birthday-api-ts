@@ -1,24 +1,129 @@
-version: '3.8'
-
 services:
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka
+    hostname: kafka
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_KRAFT_MODE: "true"
+      KAFKA_LISTENERS: CONTROLLER://kafka:9091,HOST://0.0.0.0:9092,DOCKER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: HOST://localhost:9092,DOCKER://kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,DOCKER:PLAINTEXT,HOST:PLAINTEXT
+
+      # Settings required for KRaft mode
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9091
+
+      # Listener to use for broker-to-broker communication
+      KAFKA_INTER_BROKER_LISTENER_NAME: DOCKER
+
+      # Required for a single node cluster
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '2'
+    networks:
+      - my-api
+
+  kafka-ui:
+    image: kafbat/kafka-ui:main
+    ports:
+      - "8080:8080"
+    environment:
+      # DYNAMIC_CONFIG_ENABLED: "true"
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9091,kafka:9093
+    depends_on:
+      - kafka
+    networks:
+      - my-api
+  
+  # # LocalStack (AWS mock)
   localstack:
     image: localstack/localstack:latest
+    container_name: localstack
     ports:
-      - "4566:4566"
-      - "4510-4559:4510-4559"
+      - "4566:4566"  # AWS endpoints
+      - "4571:4571"  # CloudWatch Logs
     environment:
-      - SERVICES=lambda,apigateway,dynamodb,s3,cloudformation,logs,events,iam,sts
+      - SERVICES=lambda,apigateway,iam,logs,dynamodb,events,scheduler,kafka,cloudformation  # Add your services
       - DEBUG=1
-      - LAMBDA_EXECUTOR=docker
+      - DATA_DIR=/tmp/localstack_data
       - DOCKER_HOST=unix:///var/run/docker.sock
-      - AWS_DEFAULT_REGION=us-east-1
-      - EDGE_PORT=4566
+      - HOSTNAME_EXTERNAL=localhost
+      - KAFKA_BROKERS=host.docker.internal:9093  # Pass to Lambdas
+      - CLEAR_TMP_FOLDER=0
     volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock"
-      - "./localstack-data:/tmp/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"  # SAM Docker access
+      - "./template.yaml:/docker-entrypoint-initaws.d/template.yaml:ro"  # Optional init
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Linux fix
     networks:
-      - localstack-network
+      - my-api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    tmpfs:
+      - /tmp/localstack_data:rw,size=100m
+    depends_on:
+      - kafka
+
+
+  #   # SAM Deployer (runs your script)
+  # deployer:
+  #   image: node:20-alpine
+  #   working_dir: /app
+  #   volumes:
+  #     - .:/app  # Mount entire project
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   environment:
+  #     - AWS_ENDPOINT_URL=http://localstack:4566
+  #     - AWS_DEFAULT_REGION=us-east-1
+  #     - AWS_ACCESS_KEY_ID=test
+  #     - AWS_SECRET_ACCESS_KEY=test
+  #     - SAM_CLI_TELEMETRY=0
+  #   command: >  # Inline bash script
+  #     sh -c '
+  #       apk add --no-cache curl bash aws-cli sam-cli py3-pip &&
+  #       pip install aws-sam-cli-local &&
+  #       echo "Installing npm deps..." &&
+  #       npm install &&
+  #       echo "Building TS..." &&
+  #       npm run build &&
+  #       echo "SAM build..." &&
+  #       sam build --template template.yaml --manifest package.json &&
+  #       echo "SAM deploy..." &&
+  #       sam deploy \
+  #         --stack-name my-api-stack \
+  #         --capabilities CAPABILITY_IAM \
+  #         --no-confirm-changeset \
+  #         --no-fail-on-empty-changeset \
+  #         --resolve-s3 \
+  #         --parameter-overrides Environment=local &&
+  #       API_ID=$(aws apigateway get-rest-apis --query ''items[0].id'' --output text) &&
+  #       echo "API: http://localhost:4566/restapis/${API_ID}/dev/_user_request_/" &&
+  #       aws logs describe-log-groups --query ''logGroups[*].logGroupName'' --output table
+  #     '
+  #   depends_on:
+  #     localstack:
+  #       condition: service_healthy
+  #   networks:
+  #     - my-api
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  #   profiles:
+  #     - deploy  # docker compose --profile deploy up deployer
 
 networks:
-  localstack-network:
+  my-api:
     driver: bridge

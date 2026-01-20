@@ -1,14 +1,11 @@
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { PutCommand } from '@aws-sdk/lib-dynamodb';
 import { randomUUID } from 'crypto';
+import { badRequestResponse, createdResponse, internalErrorResponse } from '../utils/response';
+import { createDynamoDBClient, getTableName } from '../utils/dynamodb';
 
-const client = new DynamoDBClient({
-  endpoint: process.env.AWS_ENDPOINT_URL || 'http://localhost:4566',
-  region: process.env.AWS_REGION || 'us-east-1',
-});
 
-const docClient = DynamoDBDocumentClient.from(client);
-const TABLE_NAME = process.env.TABLE_NAME || 'items-table';
+const docClient = createDynamoDBClient();
+const TABLE_NAME = getTableName();
 
 exports.handler = async (event: { body: any; }) => {
   console.log('Event:', JSON.stringify(event, null, 2));
@@ -30,12 +27,21 @@ exports.handler = async (event: { body: any; }) => {
       };
     }
 
-    // Create new item
+    // Validate birthday format
+    const birthdayRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!birthdayRegex.test(body.birthday)) {
+      return badRequestResponse('Invalid birthday format');
+    }
+
+    const [, month, day] = body.birthday.split('-');
+    body.birthdayMonthDay = `${month}-${day}`;
+
     const item = {
       id: randomUUID(),
       firstName: body.firstName,
       lastName: body.lastName,
       birthday: body.birthday,
+      birthdayMonthDay: body.birthdayMonthDay,
       timezone: body.timezone,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -48,30 +54,10 @@ exports.handler = async (event: { body: any; }) => {
 
     await docClient.send(command);
 
-    return {
-      statusCode: 201,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({
-        message: 'Item created successfully',
-        item,
-      }),
-    };
+    return createdResponse(item);
   } catch (error) {
     console.error('Error:', error);
 
-    return {
-      statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({
-        message: 'Internal server error',
-        error: error || 'Unknown error',
-      }),
-    };
+    return internalErrorResponse(error as Error);
   }
 };

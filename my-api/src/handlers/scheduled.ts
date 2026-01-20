@@ -1,6 +1,9 @@
-import { ScanCommand } from '@aws-sdk/lib-dynamodb';
-import { ScheduledLambdaEvent } from '../types';
+import { QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { Item, ScheduledLambdaEvent } from '../types';
 import { createDynamoDBClient, getTableName } from '../utils/dynamodb';
+import { getPossibleBirthdayKeys, is9AMInUserTimezone, isBirthdayToday } from '../utils/timecheck';
+import { birthdayGreetProducer } from '../producers/birthdayGreet';
+import { TOPIC_USERS } from '../utils/kafkaClient';
 
 const docClient = createDynamoDBClient();
 const TABLE_NAME = getTableName();
@@ -17,31 +20,31 @@ export const handler = async (event: ScheduledLambdaEvent): Promise<{ statusCode
   console.log('Execution time:', new Date().toISOString());
 
   try {
-    // Example: Count items in database
-    const command = new ScanCommand({
-      TableName: TABLE_NAME,
-      Select: 'COUNT',
+    const users = await findBirthdaysTodayOptimized();
+    const itemCount = users.length || 0;
+
+    // call producer 
+    const messages = users.map((user) => ({
+      key: `${user.firstName}-${user.lastName}`,  // For partitioning
+      value: JSON.stringify({
+        fullname: `${user.firstName} ${user.lastName}`,
+        birthday: user.birthday,
+      }),
+      headers: { source: "birthday-scheduler" },
+    }));
+
+    await birthdayGreetProducer({
+      topic: TOPIC_USERS,
+      messages,
     });
 
-    const response = await docClient.send(command);
-    const itemCount = response.Count || 0;
-
-    console.log(`Current item count: ${itemCount}`);
-
-    // Your scheduled logic here
-    // Examples:
-    // - Cleanup old items
-    // - Send notifications
-    // - Generate reports
-    // - Aggregate data
-    // - Sync with external systems
+    console.log('messages:', messages);
 
     const stats: ScheduledTaskStats = {
       timestamp: new Date().toISOString(),
       itemCount,
       status: 'success',
     };
-
     console.log('Scheduled task completed:', stats);
 
     return {
@@ -71,3 +74,44 @@ export const handler = async (event: ScheduledLambdaEvent): Promise<{ statusCode
     };
   }
 };
+
+
+/**
+   * Optimized version using GSI (if you have month-day index)
+   * Create GSI with: birthdayMonthDay as partition key
+   */
+export const findBirthdaysTodayOptimized = async (): Promise<Item[]> => {
+  try {
+    // Get unique month-day combinations for all timezones that could be "today"
+    const monthDayKeys = getPossibleBirthdayKeys();
+    console.log(`Checking ${monthDayKeys.length} possible birthday keys:`, monthDayKeys);
+
+    const birthdayUsers: Item[] = [];
+
+    // Query each month-day combination
+    for (const monthDay of monthDayKeys) {
+      const command = new QueryCommand({
+        TableName: TABLE_NAME,
+        IndexName: 'BirthdayMonthDayIndex', // GSI name
+        KeyConditionExpression: 'birthdayMonthDay = :monthDay',
+        ExpressionAttributeValues: {
+          ':monthDay': monthDay,
+        },
+      });
+
+      const response = await docClient.send(command);
+      const users = (response.Items || []) as Item[];
+
+      // Filter by timezone to ensure it's actually their birthday and filter the time to 9AM on their timezone
+      const validBirthdayUsers = users.filter((user) => isBirthdayToday(user) && is9AMInUserTimezone(user));
+      birthdayUsers.push(...validBirthdayUsers);
+    }
+
+    console.log(`Found ${birthdayUsers.length} birthday users (optimized)`);
+
+    return birthdayUsers;
+  } catch (error) {
+    console.error('Error finding birthdays (optimized):', error);
+    throw error;
+  }
+}
